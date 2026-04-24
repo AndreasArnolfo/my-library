@@ -18,6 +18,8 @@ model Snippet {
   category    String
   tags        String[]
   code        String
+  tabs        Json?
   notes       String?
   createdAt   DateTime @default(now())
 }
+

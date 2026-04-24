@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Save, Edit, ChevronDown } from 'lucide-react'
-import type { Snippet, Language, Category } from '@/lib/types'
+import { motion } from 'framer-motion'
+import { X, Save, Edit, ChevronDown, Plus } from 'lucide-react'
+import type { Snippet, Language, Category, CodeTab } from '@/lib/types'
 import { LANGUAGE_META, CATEGORY_META } from '@/lib/constants'
 import { createSnippet, updateSnippet } from '@/app/actions/snippets'
 import { useRouter } from 'next/navigation'
@@ -23,12 +24,17 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
   const [form, setForm] = useState({
     title:       initialData?.title       ?? '',
     description: initialData?.description ?? '',
-    language:    initialData?.language    ?? 'typescript',
     category:    initialData?.category    ?? 'component',
     tags:        initialData?.tags?.join(', ') ?? '',
-    code:        initialData?.code        ?? '',
     notes:       initialData?.notes       ?? '',
   })
+
+  const [tabs, setTabs] = useState<CodeTab[]>(
+    initialData?.tabs && initialData.tabs.length > 0
+      ? initialData.tabs
+      : [{ name: 'main', language: initialData?.language ?? 'typescript', code: initialData?.code ?? '' }]
+  )
+  const [activeTab, setActiveTab] = useState(0)
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -43,14 +49,33 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
+  function updateActiveTab(field: keyof CodeTab, value: string) {
+    setTabs(prev => {
+      const copy = [...prev]
+      copy[activeTab] = { ...copy[activeTab], [field]: value }
+      return copy
+    })
+  }
+
+  function addTab() {
+    setTabs(prev => [...prev, { name: `tab${prev.length + 1}`, language: 'typescript', code: '' }])
+    setActiveTab(tabs.length)
+  }
+
+  function removeTab(idx: number) {
+    if (tabs.length === 1) return
+    setTabs(prev => prev.filter((_, i) => i !== idx))
+    setActiveTab(Math.max(0, activeTab - 1))
+  }
+
   // Prompts ciblés par champ
-  const hasCode = form.code.trim().length > 0
-  const ctx = `Language: ${form.language}\n\nCode:\n${form.code}`
+  const hasCode = tabs[activeTab].code.trim().length > 0
+  const ctx = `Language: ${tabs[activeTab].language}\n\nCode:\n${tabs[activeTab].code}`
 
   const prompts = {
     title:       `For this code snippet, write a short descriptive title in French (5 words max, no punctuation, no quotes).\n\n${ctx}`,
-    language:    `Detect the programming language or framework of this code. Reply with ONLY one of these exact values, nothing else: react, typescript, python, bash, powershell, csharp, sql, dockerfile, css\n\n${form.code}`,
-    category:    `Classify this code snippet. Reply with ONLY one of these exact values, nothing else: component, script, utility\n\n${form.code}`,
+    language:    `Detect the programming language or framework of this code. Reply with ONLY one of these exact values, nothing else: react, typescript, python, bash, powershell, csharp, sql, dockerfile, css, html, javascript\n\n${tabs[activeTab].code}`,
+    category:    `Classify this code snippet. Reply with ONLY one of these exact values, nothing else: component, script, utility\n\n${tabs[activeTab].code}`,
     description: `In one French sentence, describe what this code does. No title, no intro, just the sentence.\n\n${ctx}`,
     tags:        `List 4-6 relevant lowercase tags for this code, separated by commas. No explanation, just the tags.\n\n${ctx}`,
     notes:       `In French, write documentation for this code using exactly this structure:\n\n## Utilisation\n[When and where to use this, 2-3 sentences]\n\n## Dépendances\n[List required packages as: package-name — short description. If none, write: Aucune dépendance externe]\n\n## Exemple d'intégration\n[Brief usage example or context]\n\n${ctx}`,
@@ -64,10 +89,11 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
     const payload = {
       title:       form.title,
       description: form.description,
-      language:    form.language,
+      language:    tabs[0].language as Language,
       category:    form.category,
       tags:        form.tags.split(',').map((t) => t.trim()).filter(Boolean),
-      code:        form.code,
+      code:        tabs[0].code,
+      tabs:        tabs,
       notes:       form.notes || null,
     }
 
@@ -86,11 +112,21 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-2xl bg-[#13131a] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 20 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+        className="w-full max-w-2xl bg-[#13131a] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
@@ -118,7 +154,7 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
                 <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-400" />
               </div>
             )}
-            <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-200 bg-white/5 transition">
+            <button type="button" onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-200 bg-white/5 transition">
               <X size={18} />
             </button>
           </div>
@@ -129,23 +165,63 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
             <div className="p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400">{error}</div>
           )}
 
-          {/* Code — en premier pour que les autres boutons IA aient le contexte */}
-          <Field label="Code" ai={<AiFieldButton model={model} prompt={prompts.language} onResult={(v) => {
-            // Déclenche aussi la détection de langage en arrière-plan
-            if (['react','typescript','python','bash','powershell','csharp','sql','dockerfile','css'].includes(v.trim().toLowerCase())) {
-              set('language')(v.trim().toLowerCase())
-            }
-          }} disabled={!hasCode} stream={false} />}>
+          {/* Code Tabs Editor */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-300 flex items-center gap-2">Fichiers / Code</label>
+              <AiFieldButton model={model} prompt={prompts.language} onResult={(v) => {
+                const clean = v.trim().toLowerCase()
+                if (['react','typescript','javascript','html','python','bash','powershell','csharp','sql','dockerfile','css'].includes(clean)) {
+                  updateActiveTab('language', clean)
+                }
+              }} disabled={!hasCode} stream={false} />
+            </div>
+            
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {tabs.map((tab, i) => (
+                <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors border ${activeTab === i ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-200' : 'bg-white/5 border-white/5 text-slate-400 hover:text-slate-200'}`}>
+                  <button type="button" onClick={() => setActiveTab(i)} className="outline-none">
+                    {tab.name || `Tab ${i + 1}`}
+                  </button>
+                  {tabs.length > 1 && (
+                    <button type="button" onClick={() => removeTab(i)} className="hover:text-red-400 text-slate-500 transition-colors ml-1">
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={addTab} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-white/5 border border-white/5 text-slate-400 hover:text-slate-200 transition-colors">
+                <Plus size={14} /> Ajouter
+              </button>
+            </div>
+            
+            <div className="flex gap-2 mb-1">
+              <input 
+                value={tabs[activeTab].name}
+                onChange={e => updateActiveTab('name', e.target.value)}
+                placeholder="Nom (ex: index.html)"
+                className="flex-1 px-3 py-2 bg-[#0d0d14] border border-white/10 rounded-xl text-sm focus:border-indigo-500/50 outline-none text-slate-200"
+              />
+              <select
+                value={tabs[activeTab].language}
+                onChange={e => updateActiveTab('language', e.target.value)}
+                className="w-1/3 px-3 py-2 bg-[#0d0d14] border border-white/10 rounded-xl text-sm focus:border-indigo-500/50 outline-none text-slate-200 appearance-none"
+              >
+                {Object.entries(LANGUAGE_META).map(([key, meta]) => (
+                  <option key={key} value={key} className="bg-[#13131a]">{meta.label}</option>
+                ))}
+              </select>
+            </div>
+
             <textarea
               required
-              name="code"
-              value={form.code}
-              onChange={handleChange}
+              value={tabs[activeTab].code}
+              onChange={e => updateActiveTab('code', e.target.value)}
               rows={8}
               className="w-full px-4 py-2.5 bg-[#0d0d14] border border-white/10 rounded-xl text-sm focus:border-indigo-500/50 outline-none font-mono text-slate-300 resize-none"
-              placeholder="Collez votre code ici…"
+              placeholder={`Collez votre code ${tabs[activeTab].name} ici…`}
             />
-          </Field>
+          </div>
 
           {/* Titre */}
           <Field label="Titre" ai={<AiFieldButton model={model} prompt={prompts.title} onResult={set('title')} disabled={!hasCode} stream={false} />}>
@@ -159,42 +235,22 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
             />
           </Field>
 
-          {/* Langage + Catégorie */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Langage" ai={<AiFieldButton model={model} prompt={prompts.language} onResult={(v) => {
-              const clean = v.trim().toLowerCase()
-              if (['react','typescript','python','bash','powershell','csharp','sql','dockerfile','css'].includes(clean)) {
-                set('language')(clean)
-              }
-            }} disabled={!hasCode} stream={false} />}>
-              <select
-                name="language"
-                value={form.language}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm focus:border-indigo-500/50 outline-none text-slate-200 appearance-none"
-              >
-                {Object.entries(LANGUAGE_META).map(([key, meta]) => (
-                  <option key={key} value={key} className="bg-[#13131a]">{meta.label}</option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Catégorie" ai={<AiFieldButton model={model} prompt={prompts.category} onResult={(v) => {
-              const clean = v.trim().toLowerCase()
-              if (['component','script','utility'].includes(clean)) set('category')(clean)
-            }} disabled={!hasCode} stream={false} />}>
-              <select
-                name="category"
-                value={form.category}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm focus:border-indigo-500/50 outline-none text-slate-200 appearance-none"
-              >
-                {Object.entries(CATEGORY_META).map(([key, meta]) => (
-                  <option key={key} value={key} className="bg-[#13131a]">{meta.label}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
+          {/* Catégorie */}
+          <Field label="Catégorie" ai={<AiFieldButton model={model} prompt={prompts.category} onResult={(v) => {
+            const clean = v.trim().toLowerCase()
+            if (['component','script','utility'].includes(clean)) set('category')(clean)
+          }} disabled={!hasCode} stream={false} />}>
+            <select
+              name="category"
+              value={form.category}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm focus:border-indigo-500/50 outline-none text-slate-200 appearance-none"
+            >
+              {Object.entries(CATEGORY_META).map(([key, meta]) => (
+                <option key={key} value={key} className="bg-[#13131a]">{meta.label}</option>
+              ))}
+            </select>
+          </Field>
 
           {/* Description */}
           <Field label="Description" ai={<AiFieldButton model={model} prompt={prompts.description} onResult={set('description')} disabled={!hasCode} />}>
@@ -250,8 +306,8 @@ export default function SnippetFormModal({ initialData, onClose }: Props) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
 

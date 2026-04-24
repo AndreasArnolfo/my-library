@@ -8,8 +8,16 @@ export type Language =
   | 'sql'
   | 'dockerfile'
   | 'css'
+  | 'html'
+  | 'javascript'
 
 export type Category = 'component' | 'script' | 'utility'
+
+export interface CodeTab {
+  name: string
+  language: string
+  code: string
+}
 
 export interface Snippet {
   id: string
@@ -19,6 +27,7 @@ export interface Snippet {
   category: Category
   tags: string[]
   code: string
+  tabs?: CodeTab[] | null
   notes?: string | null
   createdAt: string
 }

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Search, Code2, Terminal, Wrench, X, Plus } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import type { Snippet, Language, Category } from '@/lib/types'
 import { LANGUAGE_META, CATEGORY_META } from '@/lib/constants'
@@ -21,6 +22,31 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [selected, setSelected] = useState<Snippet | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const inInput = document.activeElement?.tagName === 'INPUT' ||
+                      document.activeElement?.tagName === 'TEXTAREA' ||
+                      (document.activeElement as HTMLElement)?.isContentEditable
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        searchRef.current?.focus()
+        searchRef.current?.select()
+        return
+      }
+      if (e.key === 'n' && !inInput && !selected && !showForm) {
+        setShowForm(true)
+        return
+      }
+      if (e.key === 'Escape' && !selected && !showForm && search) {
+        setSearch('')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected, showForm, search])
 
   const languages = useMemo(() => {
     const counts = new Map<Language, number>()
@@ -155,17 +181,24 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
               style={{ color: '#4a5568' }}
             />
             <input
+              ref={searchRef}
               type="text"
               placeholder="Rechercher par titre, description ou tag..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm rounded-xl outline-none transition-all"
+              className="w-full pl-9 pr-16 py-2 text-sm rounded-xl outline-none transition-all"
               style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(255,255,255,0.08)',
                 color: '#e2e8f0',
               }}
             />
+            <kbd
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs px-1.5 py-0.5 rounded font-mono pointer-events-none"
+              style={{ background: 'rgba(255,255,255,0.06)', color: '#4a5568', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              ⌘K
+            </kbd>
           </div>
           <div className="text-sm text-slate-500 shrink-0">
             {filtered.length} snippet{filtered.length !== 1 ? 's' : ''}
@@ -176,6 +209,7 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
           >
             <Plus size={14} />
             Nouveau
+            <kbd className="text-xs px-1 py-0.5 rounded font-mono ml-1 opacity-70" style={{ background: 'rgba(255,255,255,0.15)' }}>N</kbd>
           </button>
           {hasFilter && (
             <button
@@ -223,53 +257,75 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
 
         {/* Grid */}
         <div className="flex-1 overflow-y-auto p-6">
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-600">
-              <Search size={40} strokeWidth={1} />
-              <p className="text-sm">Aucun snippet trouvé</p>
-              <button onClick={clearFilters} className="text-xs text-indigo-400 hover:underline">
-                Réinitialiser les filtres
-              </button>
-            </div>
-          ) : (
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-              {filtered.map((snippet) => (
-                <SnippetCard key={snippet.id} snippet={snippet} onClick={() => setSelected(snippet)} />
-              ))}
-            </div>
-          )}
+          <AnimatePresence mode="wait">
+            {filtered.length === 0 ? (
+              <motion.div
+                key="empty"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="flex flex-col items-center justify-center h-full gap-3 text-slate-600"
+              >
+                <Search size={40} strokeWidth={1} />
+                <p className="text-sm">Aucun snippet trouvé</p>
+                <button onClick={clearFilters} className="text-xs text-indigo-400 hover:underline">
+                  Réinitialiser les filtres
+                </button>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="grid"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="grid gap-3"
+                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}
+              >
+                <AnimatePresence mode="popLayout">
+                  {filtered.map((snippet, i) => (
+                    <SnippetCard key={snippet.id} snippet={snippet} index={i} onClick={() => setSelected(snippet)} />
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </main>
 
-      {selected && <CodeModal snippet={selected} onClose={() => setSelected(null)} />}
-      {showForm && <SnippetFormModal onClose={() => setShowForm(false)} />}
+      <AnimatePresence>
+        {selected && <CodeModal snippet={selected} onClose={() => setSelected(null)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showForm && <SnippetFormModal onClose={() => setShowForm(false)} />}
+      </AnimatePresence>
     </div>
   )
 }
 
-function SnippetCard({ snippet, onClick }: { snippet: Snippet; onClick: () => void }) {
+function SnippetCard({ snippet, onClick, index }: { snippet: Snippet; onClick: () => void; index: number }) {
   const meta = LANGUAGE_META[snippet.language]
   const preview = snippet.code.split('\n').slice(0, 3).join('\n')
 
   return (
-    <button
+    <motion.button
+      layout
+      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+      transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3), ease: 'easeOut' }}
+      whileHover={{ y: -2, boxShadow: `0 10px 28px ${meta.color}20` }}
+      whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className="text-left flex flex-col gap-3 p-4 rounded-xl transition-all group"
+      className="text-left flex flex-col gap-3 p-4 rounded-xl group"
       style={{
         background: '#13131a',
         border: '1px solid rgba(255,255,255,0.06)',
         cursor: 'pointer',
       }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = meta.color + '44'
-        ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'
-        ;(e.currentTarget as HTMLElement).style.boxShadow = `0 8px 24px ${meta.color}18`
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'
-        ;(e.currentTarget as HTMLElement).style.transform = ''
-        ;(e.currentTarget as HTMLElement).style.boxShadow = ''
-      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = meta.color + '44' }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)' }}
     >
       <div className="flex items-center justify-between">
         <span
@@ -317,6 +373,6 @@ function SnippetCard({ snippet, onClick }: { snippet: Snippet; onClick: () => vo
           <span className="text-xs text-slate-700">+{snippet.tags.length - 3}</span>
         )}
       </div>
-    </button>
+    </motion.button>
   )
 }
