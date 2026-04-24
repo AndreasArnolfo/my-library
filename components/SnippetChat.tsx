@@ -5,6 +5,7 @@ import { Send, Bot, User, Sparkles, RotateCcw } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Snippet } from '@/lib/types'
 import { LANGUAGE_META } from '@/lib/constants'
+import { streamOllama } from '@/lib/ollama-client'
 
 interface Message {
   id: string
@@ -79,27 +80,18 @@ export default function SnippetChat({ snippet, model }: Props) {
     ]
 
     try {
-      const res = await fetch('/api/ollama/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: apiMessages }),
+      await streamOllama({
+        endpoint: '/api/chat',
+        body: { model, messages: apiMessages },
         signal: abortRef.current.signal,
+        onChunk: (chunk) => {
+          setMessages(prev =>
+            prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m)
+          )
+        },
       })
-
-      if (!res.ok) throw new Error('Erreur API')
-
-      const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        setMessages(prev =>
-          prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m)
-        )
-      }
-    } catch {
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantId

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Sparkles, Loader2 } from 'lucide-react'
+import { streamOllama } from '@/lib/ollama-client'
 
 interface Props {
   model: string
@@ -19,27 +20,15 @@ export default function AiFieldButton({ model, prompt, onResult, disabled, strea
     setLoading(true)
 
     try {
-      const res = await fetch('/api/ollama/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt }),
+      let accumulated = ''
+      const full = await streamOllama({
+        endpoint: '/api/generate',
+        body: { model, prompt },
+        onChunk: (chunk) => {
+          if (stream) { accumulated += chunk; onResult(accumulated) }
+        },
       })
-      if (!res.ok) return
-
-      const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let text = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        text += decoder.decode(value, { stream: true })
-        if (stream) onResult(text)
-      }
-
-      // Final call: trimmed, only if not already streaming (avoids double-call)
-      if (!stream) onResult(text.trim())
-      else if (text !== text.trim()) onResult(text.trim())
+      onResult(full.trim())
     } catch (err) {
       console.error('[AiFieldButton]', err)
     } finally {

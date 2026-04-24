@@ -3,12 +3,16 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Search, Code2, Terminal, Wrench, X, Plus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import dynamic from 'next/dynamic'
 import type { Snippet, Language, Category } from '@/lib/types'
 import { LANGUAGE_META, CATEGORY_META } from '@/lib/constants'
+import { useOllamaModel } from '@/hooks/useOllamaModel'
 
 const CodeModal = dynamic(() => import('./CodeModal'), { ssr: false })
 const SnippetFormModal = dynamic(() => import('./SnippetFormModal'), { ssr: false })
+const OllamaSettings = dynamic(() => import('./OllamaSettings'), { ssr: false })
 
 const CATEGORY_ICONS = {
   component: Code2,
@@ -23,6 +27,7 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
   const [selected, setSelected] = useState<Snippet | null>(null)
   const [showForm, setShowForm] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const { available, ollamaUrl, updateOllamaUrl } = useOllamaModel()
   const stateRef = useRef({ selected, showForm, search })
   stateRef.current = { selected, showForm, search }
 
@@ -146,21 +151,32 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
           <div className="flex flex-col gap-0.5">
             {languages.map(([lang, count]) => {
               const meta = LANGUAGE_META[lang]
+              const isActive = activeLanguage === lang
               return (
                 <button
                   key={lang}
-                  onClick={() => setActiveLanguage(activeLanguage === lang ? null : lang)}
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm transition-all text-left group"
+                  onClick={() => setActiveLanguage(isActive ? null : lang)}
+                  className="flex items-center justify-between px-2 py-1.5 rounded-lg text-sm transition-all text-left"
                   style={{
-                    background: activeLanguage === lang ? meta.bg : 'transparent',
-                    color: activeLanguage === lang ? meta.color : '#64748b',
+                    background: isActive ? meta.bg : 'transparent',
+                    color: isActive ? meta.color : '#64748b',
                   }}
                 >
                   <span className="flex items-center gap-2">
                     <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ background: meta.color }}
-                    />
+                      className="font-mono font-bold text-center shrink-0"
+                      style={{
+                        fontSize: '9px',
+                        letterSpacing: '0.03em',
+                        color: isActive ? meta.color : 'rgba(255,255,255,0.25)',
+                        background: isActive ? `${meta.color}22` : 'rgba(255,255,255,0.06)',
+                        padding: '2px 4px',
+                        borderRadius: '3px',
+                        minWidth: '28px',
+                      }}
+                    >
+                      {meta.abbr}
+                    </span>
                     {meta.label}
                   </span>
                   <span className="text-xs">{count}</span>
@@ -204,6 +220,7 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
               ⌘K
             </kbd>
           </div>
+          <OllamaSettings currentUrl={ollamaUrl} onSave={updateOllamaUrl} available={available} />
           <div className="text-sm text-slate-500 shrink-0">
             {filtered.length} snippet{filtered.length !== 1 ? 's' : ''}
           </div>
@@ -310,7 +327,7 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
 
 function SnippetCard({ snippet, onClick, index }: { snippet: Snippet; onClick: () => void; index: number }) {
   const meta = LANGUAGE_META[snippet.language]
-  const preview = snippet.code.split('\n').slice(0, 3).join('\n')
+  const previewCode = snippet.code.split('\n').slice(0, 5).join('\n')
 
   return (
     <motion.button
@@ -319,18 +336,19 @@ function SnippetCard({ snippet, onClick, index }: { snippet: Snippet; onClick: (
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
       transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3), ease: 'easeOut' }}
-      whileHover={{ y: -2, boxShadow: `0 10px 28px ${meta.color}20` }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ y: -3, boxShadow: `0 12px 32px ${meta.color}18` }}
+      whileTap={{ scale: 0.985 }}
       onClick={onClick}
-      className="text-left flex flex-col gap-3 p-4 rounded-xl group"
+      className="text-left flex flex-col gap-3 p-4"
       style={{
         background: '#13131a',
         border: '1px solid rgba(255,255,255,0.06)',
+        borderLeft: `3px solid ${meta.color}`,
+        borderRadius: '0 12px 12px 0',
         cursor: 'pointer',
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = meta.color + '44' }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)' }}
     >
+      {/* Header */}
       <div className="flex items-center justify-between">
         <span
           className="text-xs font-semibold px-2 py-0.5 rounded-full"
@@ -338,28 +356,38 @@ function SnippetCard({ snippet, onClick, index }: { snippet: Snippet; onClick: (
         >
           {meta.label}
         </span>
-        <span className="text-xs text-slate-600">
+        <span className="text-xs text-slate-700">
           {new Date(snippet.createdAt).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}
         </span>
       </div>
 
+      {/* Title + description */}
       <div>
-        <h3 className="font-medium text-sm text-slate-200 mb-1">{snippet.title}</h3>
+        <h3 className="font-semibold text-sm text-slate-100 mb-1 leading-snug">{snippet.title}</h3>
         <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{snippet.description}</p>
       </div>
 
-      {/* Code preview */}
-      <div
-        className="rounded-lg p-3 text-xs overflow-hidden"
-        style={{
-          background: '#0d0d14',
-          fontFamily: 'var(--font-geist-mono, monospace)',
-          color: '#4a5568',
-          lineHeight: '1.5',
-          maxHeight: '60px',
-        }}
-      >
-        {preview}
+      {/* Code preview — syntax highlighted */}
+      <div className="rounded-lg overflow-hidden relative" style={{ maxHeight: '66px' }}>
+        <SyntaxHighlighter
+          language={meta.prism}
+          style={vscDarkPlus}
+          customStyle={{
+            margin: 0,
+            padding: '8px 12px',
+            background: '#0a0a12',
+            fontSize: '10.5px',
+            lineHeight: '1.55',
+            borderRadius: 0,
+          }}
+        >
+          {previewCode}
+        </SyntaxHighlighter>
+        {/* Fade mask bottom */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-7 pointer-events-none"
+          style={{ background: 'linear-gradient(to bottom, transparent, #0a0a12)' }}
+        />
       </div>
 
       {/* Tags */}
