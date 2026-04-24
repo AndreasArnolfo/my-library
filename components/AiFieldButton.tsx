@@ -37,8 +37,9 @@ export default function AiFieldButton({ model, prompt, onResult, disabled, strea
         if (stream) onResult(text)
       }
 
-      // Always call with final trimmed value
-      onResult(text.trim())
+      // Final call: trimmed, only if not already streaming (avoids double-call)
+      if (!stream) onResult(text.trim())
+      else if (text !== text.trim()) onResult(text.trim())
     } catch (err) {
       console.error('[AiFieldButton]', err)
     } finally {

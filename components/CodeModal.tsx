@@ -15,7 +15,7 @@ import { useOllamaModel } from '@/hooks/useOllamaModel'
 const SnippetFormModal = dynamic(() => import('./SnippetFormModal'), { ssr: false })
 const SnippetChat = dynamic(() => import('./SnippetChat'), { ssr: false })
 
-function NotesCodeTabs({ snippet }: { snippet: Snippet }) {
+function NotesCodeTabs({ snippet, onActiveCode }: { snippet: Snippet; onActiveCode?: (code: string) => void }) {
   const [activeTab, setActiveTab] = useState<number | 'notes'>(0)
   const hasNotes = Boolean(snippet.notes)
 
@@ -32,7 +32,7 @@ function NotesCodeTabs({ snippet }: { snippet: Snippet }) {
         {files.map((f, i) => (
           <button
             key={i}
-            onClick={() => setActiveTab(i)}
+            onClick={() => { setActiveTab(i); onActiveCode?.(files[i].code) }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-t-lg transition-all"
             style={{
               background: activeTab === i ? '#0d0d14' : 'transparent',
@@ -107,6 +107,7 @@ export default function CodeModal({ snippet, onClose }: Props) {
   const [isEditing, setIsEditing] = useState(false)
   const [isZen, setIsZen] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [activeCode, setActiveCode] = useState(snippet.code)
   const { model } = useOllamaModel()
   const meta = LANGUAGE_META[snippet.language]
 
@@ -127,7 +128,7 @@ export default function CodeModal({ snippet, onClose }: Props) {
   }, [onClose, isZen, isChatOpen])
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(snippet.code)
+    await navigator.clipboard.writeText(activeCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -263,7 +264,7 @@ export default function CodeModal({ snippet, onClose }: Props) {
               </div>
             )}
 
-            <NotesCodeTabs snippet={snippet} />
+            <NotesCodeTabs snippet={snippet} onActiveCode={setActiveCode} />
 
             {!isZen && (
               <div className="px-6 py-2 shrink-0 text-xs text-slate-600 flex items-center gap-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>

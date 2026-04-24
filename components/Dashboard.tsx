@@ -23,9 +23,12 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
   const [selected, setSelected] = useState<Snippet | null>(null)
   const [showForm, setShowForm] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const stateRef = useRef({ selected, showForm, search })
+  stateRef.current = { selected, showForm, search }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      const { selected, showForm, search } = stateRef.current
       const inInput = document.activeElement?.tagName === 'INPUT' ||
                       document.activeElement?.tagName === 'TEXTAREA' ||
                       (document.activeElement as HTMLElement)?.isContentEditable
@@ -46,7 +49,8 @@ export default function Dashboard({ initialSnippets = [] }: { initialSnippets: S
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, showForm, search])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const languages = useMemo(() => {
     const counts = new Map<Language, number>()

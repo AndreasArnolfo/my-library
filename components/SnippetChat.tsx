@@ -42,6 +42,9 @@ export default function SnippetChat({ snippet, model }: Props) {
   const [isLoading, setIsLoading] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => { abortRef.current?.abort() }, [])
   const meta = LANGUAGE_META[snippet.language]
 
   useEffect(() => {
@@ -66,6 +69,8 @@ export default function SnippetChat({ snippet, model }: Props) {
     setMessages(prev => [...prev, userMsg, assistantMsg])
     setInput('')
     setIsLoading(true)
+    abortRef.current?.abort()
+    abortRef.current = new AbortController()
 
     const apiMessages = [
       { role: 'system', content: buildSystemPrompt(snippet, meta.label) },
@@ -78,6 +83,7 @@ export default function SnippetChat({ snippet, model }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, messages: apiMessages }),
+        signal: abortRef.current.signal,
       })
 
       if (!res.ok) throw new Error('Erreur API')
@@ -175,20 +181,7 @@ export default function SnippetChat({ snippet, model }: Props) {
                 <button
                   key={s}
                   onClick={() => sendMessage(s)}
-                  className="text-left text-xs px-3 py-2 rounded-xl transition-all"
-                  style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    color: '#64748b',
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(99,102,241,0.3)'
-                    ;(e.currentTarget as HTMLElement).style.color = '#94a3b8'
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'
-                    ;(e.currentTarget as HTMLElement).style.color = '#64748b'
-                  }}
+                  className="text-left text-xs px-3 py-2 rounded-xl transition-all suggestion-btn"
                 >
                   {s}
                 </button>
